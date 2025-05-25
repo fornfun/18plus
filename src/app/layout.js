@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "StreamFlix - Premium Video Streaming",
-  description: "Your ultimate destination for streaming the best videos online. Watch movies, documentaries, tutorials and more.",
+  title: "18Plus - Premium Porn Video Streaming",
+  description: "18Plus is a premium porn video streaming platform that offers high-quality adult content. Enjoy exclusive videos, live cams, and more.",
 };
 
 export default function RootLayout({ children }) {
