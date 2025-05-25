@@ -30,10 +30,7 @@ async function fetchMetadata(teraId) {
     
     // Clean up the title by removing TeraBox suffix as specified
     let cleanTitle = data.title || '';
-    // Decode HTML entities first
-    cleanTitle = cleanTitle.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
-    // Remove TeraBox suffix (handle both encoded and unencoded versions)
-    cleanTitle = cleanTitle.replace(/ - Share Files Online (&amp;|&) Send Larges Files with TeraBox$/g, '');
+    cleanTitle = cleanTitle.replace(/ - Share Files Online & Send Larges Files with TeraBox$/g, '');
     cleanTitle = cleanTitle.replace(/\.mp4$/i, ''); // Also remove .mp4 extension
     cleanTitle = cleanTitle.trim();
     
@@ -55,7 +52,7 @@ async function updateVideoMetadata(videoId, metadata) {
       .set({
         title: metadata.title,
         poster: metadata.poster,
-        updated_at: new Date().toISOString()
+        updatedAt: new Date()
       })
       .where(eq(videos.id, videoId))
       .returning();
@@ -82,7 +79,7 @@ async function updateAllVideosMetadata() {
     const videosToUpdate = await db
       .select({
         id: videos.id,
-        tera_id: videos.tera_id,
+        teraId: videos.teraId,
         title: videos.title,
         poster: videos.poster
       })
@@ -110,10 +107,10 @@ async function updateAllVideosMetadata() {
     for (let i = 0; i < videosToUpdate.length; i++) {
       const video = videosToUpdate[i];
       
-      console.log(`\n🔍 Processing ${i + 1}/${videosToUpdate.length}: ${video.tera_id}`);
+      console.log(`\n🔍 Processing ${i + 1}/${videosToUpdate.length}: ${video.teraId}`);
       
       // Fetch metadata from API
-      const metadata = await fetchMetadata(video.tera_id);
+      const metadata = await fetchMetadata(video.teraId);
       
       if (metadata && metadata.title) {
         // Update database
@@ -125,7 +122,7 @@ async function updateAllVideosMetadata() {
           errorCount++;
         }
       } else {
-        console.log(`⚠️  No valid metadata found for ${video.tera_id}`);
+        console.log(`⚠️  No valid metadata found for ${video.teraId}`);
         errorCount++;
       }
       
@@ -149,7 +146,7 @@ async function updateAllVideosMetadata() {
   }
 }
 
-// Function to update specific video by tera_id (for testing)
+// Function to update specific video by teraId (for testing)
 async function updateSingleVideo(teraId) {
   try {
     console.log(`🔍 Updating single video: ${teraId}`);
@@ -158,7 +155,7 @@ async function updateSingleVideo(teraId) {
     const video = await db
       .select()
       .from(videos)
-      .where(eq(videos.tera_id, teraId))
+      .where(eq(videos.teraId, teraId))
       .limit(1);
     
     if (video.length === 0) {
@@ -192,7 +189,7 @@ async function forceUpdateAllVideos() {
     const videosToUpdate = await db
       .select({
         id: videos.id,
-        tera_id: videos.tera_id,
+        teraId: videos.teraId,
         title: videos.title,
         poster: videos.poster
       })
@@ -212,10 +209,10 @@ async function forceUpdateAllVideos() {
     for (let i = 0; i < videosToUpdate.length; i++) {
       const video = videosToUpdate[i];
       
-      console.log(`\n🔍 Processing ${i + 1}/${videosToUpdate.length}: ${video.tera_id}`);
+      console.log(`\n🔍 Processing ${i + 1}/${videosToUpdate.length}: ${video.teraId}`);
       
       // Fetch metadata from API
-      const metadata = await fetchMetadata(video.tera_id);
+      const metadata = await fetchMetadata(video.teraId);
       
       if (metadata && metadata.title) {
         // Update database
@@ -227,7 +224,7 @@ async function forceUpdateAllVideos() {
           errorCount++;
         }
       } else {
-        console.log(`⚠️  No valid metadata found for ${video.tera_id}`);
+        console.log(`⚠️  No valid metadata found for ${video.teraId}`);
         errorCount++;
       }
       

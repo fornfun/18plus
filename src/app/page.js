@@ -1,23 +1,77 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import CategoryFilter from '@/components/CategoryFilter';
-import VideoGrid from '@/components/VideoGrid';
+import InfiniteVideoGrid from '@/components/InfiniteVideoGrid';
 import Footer from '@/components/Footer';
-import { sampleVideos, categories, featuredCreators } from '@/data/sampleVideos';
 import VideoCard from '@/components/VideoCard';
+import { fetchVideosClient, fetchCategoriesClient } from '@/lib/api';
+import { Shuffle, SortDesc, Grid3X3, List } from 'lucide-react';
 
 export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [filteredVideos, setFilteredVideos] = useState(sampleVideos);
+  const [trendingVideos, setTrendingVideos] = useState([]);
+  const [categories, setCategories] = useState(['All']);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isRandomFeed, setIsRandomFeed] = useState(false);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [order, setOrder] = useState('desc');
+  const [totalVideos, setTotalVideos] = useState(0);
+
+  // Fetch categories on component mount
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const { categories: fetchedCategories } = await fetchCategoriesClient();
+        setCategories(fetchedCategories);
+      } catch (err) {
+        console.error('Error loading categories:', err);
+      }
+    };
+    
+    loadCategories();
+  }, []);
+
+  // Load trending videos on component mount
+  useEffect(() => {
+    const loadTrendingVideos = async () => {
+      try {
+        const { videos: trending } = await fetchVideosClient({
+          limit: '6',
+          sortBy: 'views',
+          order: 'desc'
+        });
+        setTrendingVideos(trending);
+        
+        // Also fetch total video count
+        const { pagination } = await fetchVideosClient({
+          limit: '1',
+          page: '1'
+        });
+        setTotalVideos(pagination.total || 0);
+      } catch (err) {
+        console.error('Error loading trending videos:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadTrendingVideos();
+  }, []);
 
   const handleCategoryChange = (category) => {
     setSelectedCategory(category);
-    if (category === 'All') {
-      setFilteredVideos(sampleVideos);
-    } else {
-      setFilteredVideos(sampleVideos.filter(video => video.category === category));
-    }
+  };
+
+  const toggleRandomFeed = () => {
+    setIsRandomFeed(!isRandomFeed);
+  };
+
+  const handleSortChange = (newSortBy, newOrder = 'desc') => {
+    setSortBy(newSortBy);
+    setOrder(newOrder);
+    setIsRandomFeed(false); // Disable random when using specific sort
   };
 
   return (
@@ -32,7 +86,12 @@ export default function HomePage() {
               <span className="text-orange-500">18</span>
               <span className="text-white">Plus</span>
             </h1>
-            <p className="text-xl text-gray-300 mb-8">Premium Adult Entertainment</p>
+            <p className="text-xl text-gray-300 mb-4">Premium Adult Entertainment</p>
+            {totalVideos > 0 && (
+              <p className="text-lg text-orange-400 mb-8 font-semibold">
+                🎬 {totalVideos.toLocaleString()} Premium Videos Available
+              </p>
+            )}
             <div className="flex justify-center items-center space-x-6 text-sm text-gray-400">
               <span>🔥 Hot & Fresh</span>
               <span>📱 Mobile Friendly</span>
@@ -58,12 +117,58 @@ export default function HomePage() {
               <h2 className="text-2xl font-bold text-white">
                 {selectedCategory === 'All' ? '🔥 Hot Videos' : `${selectedCategory} Videos`}
               </h2>
-              <div className="text-sm text-gray-400">
-                {filteredVideos.length} videos found
+              <div className="flex items-center space-x-4">
+                {/* Random Feed Toggle */}
+                <button
+                  onClick={toggleRandomFeed}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                    isRandomFeed 
+                      ? 'bg-orange-500 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  <Shuffle size={16} />
+                  <span>Random</span>
+                </button>
+                
+                {/* Sort Controls */}
+                {!isRandomFeed && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleSortChange('views', 'desc')}
+                      className={`flex items-center space-x-1 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        sortBy === 'views' 
+                          ? 'bg-orange-500 text-white' 
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      <SortDesc size={14} />
+                      <span>Most Viewed</span>
+                    </button>
+                    <button
+                      onClick={() => handleSortChange('created_at', 'desc')}
+                      className={`flex items-center space-x-1 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        sortBy === 'created_at' 
+                          ? 'bg-orange-500 text-white' 
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      <List size={14} />
+                      <span>Latest</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+            
+            {/* Infinite Scroll Video Grid */}
+            <InfiniteVideoGrid 
+              category={selectedCategory}
+              sortBy={isRandomFeed ? 'random' : sortBy}
+              order={isRandomFeed ? 'asc' : order}
+              key={`${selectedCategory}-${isRandomFeed}-${sortBy}-${order}`}
+            />
           </div>
-          <VideoGrid videos={filteredVideos} />
         </section>
 
         {/* Popular Categories */}
@@ -127,7 +232,7 @@ export default function HomePage() {
               <p className="text-gray-400">The hottest videos everyone&apos;s watching</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 lg:gap-6">
-              {sampleVideos.slice(0, 6).map((video, index) => (
+              {trendingVideos.map((video, index) => (
                 <div 
                   key={video.id} 
                   className="relative opacity-0 animate-fadeIn"

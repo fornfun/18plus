@@ -2,9 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/Header';
-import VideoGrid from '@/components/VideoGrid';
+import InfiniteVideoGrid from '@/components/InfiniteVideoGrid';
 import Footer from '@/components/Footer';
-import { sampleVideos } from '@/data/sampleVideos';
 import { Search, Filter } from 'lucide-react';
 
 function SearchPage() {
@@ -12,49 +11,40 @@ function SearchPage() {
   const query = searchParams.get('q') || '';
   
   const [searchQuery, setSearchQuery] = useState(query);
-  const [filteredVideos, setFilteredVideos] = useState([]);
   const [sortBy, setSortBy] = useState('relevance');
-  const [loading, setLoading] = useState(false);
+  const [searchSubmitted, setSearchSubmitted] = useState(false);
 
+  // Update search when URL query parameter changes
   useEffect(() => {
-    if (searchQuery) {
-      setLoading(true);
-      // Simulate search delay
-      setTimeout(() => {
-        const results = sampleVideos.filter(video =>
-          video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          video.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          video.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
-        setFilteredVideos(results);
-        setLoading(false);
-      }, 500);
-    } else {
-      setFilteredVideos([]);
+    if (query && query !== searchQuery) {
+      setSearchQuery(query);
+      setSearchSubmitted(true);
     }
-  }, [searchQuery]);
+  }, [query, searchQuery]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     const form = new FormData(e.target);
     const newQuery = form.get('search');
     setSearchQuery(newQuery);
+    setSearchSubmitted(true);
   };
 
-  const sortVideos = (videos, sortType) => {
-    switch (sortType) {
+  // Convert sort options to API parameters
+  const getApiSortParams = () => {
+    switch (sortBy) {
       case 'views':
-        return [...videos].sort((a, b) => parseFloat(b.views) - parseFloat(a.views));
+        return { sortBy: 'views', order: 'desc' };
       case 'rating':
-        return [...videos].sort((a, b) => b.rating - a.rating);
+        return { sortBy: 'likes', order: 'desc' };
       case 'date':
-        return [...videos].sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
-      default:
-        return videos;
+        return { sortBy: 'created_at', order: 'desc' };
+      case 'random':
+        return { sortBy: 'random', order: 'asc' };
+      default: // relevance
+        return { sortBy: 'created_at', order: 'desc' };
     }
   };
-
-  const sortedVideos = sortVideos(filteredVideos, sortBy);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -104,19 +94,24 @@ function SearchPage() {
                   <option value="views">Most Viewed</option>
                   <option value="rating">Highest Rated</option>
                   <option value="date">Newest</option>
+                  <option value="random">Random</option>
                 </select>
               </div>
               
               <div className="text-gray-400 text-sm">
-                {loading ? 'Searching...' : `${sortedVideos.length} results found`}
+                {searchQuery && searchSubmitted ? 'Showing search results' : 'Enter search terms above'}
               </div>
             </div>
           )}
         </div>
 
         {/* Results */}
-        {searchQuery ? (
-          <VideoGrid videos={sortedVideos} loading={loading} />
+        {searchQuery && searchSubmitted ? (
+          <InfiniteVideoGrid 
+            search={searchQuery}
+            {...getApiSortParams()}
+            key={`search-${searchQuery}-${sortBy}`}
+          />
         ) : (
           <div className="text-center py-16">
             <div className="text-6xl mb-4">🔍</div>

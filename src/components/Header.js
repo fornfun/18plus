@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { Search, User, Heart, History, Menu, X } from 'lucide-react';
+import { Search, User, Heart, History, Menu, X, Upload } from 'lucide-react';
 import Link from 'next/link';
 
 const Header = () => {
@@ -28,6 +28,10 @@ const Header = () => {
             </Link>
             <Link href="/trending" className="text-gray-300 hover:text-orange-500 transition-colors">
               Trending
+            </Link>
+            <Link href="/upload" className="flex items-center space-x-1 text-gray-300 hover:text-orange-500 transition-colors">
+              <Upload className="w-4 h-4" />
+              <span>Upload</span>
             </Link>
             <Link href="/live" className="text-gray-300 hover:text-orange-500 transition-colors">
               Live Cams
@@ -107,6 +111,10 @@ const Header = () => {
                 <Link href="/" className="block text-gray-300 hover:text-orange-500">Home</Link>
                 <Link href="/categories" className="block text-gray-300 hover:text-orange-500">Categories</Link>
                 <Link href="/trending" className="block text-gray-300 hover:text-orange-500">Trending</Link>
+                <Link href="/upload" className="flex items-center space-x-2 text-gray-300 hover:text-orange-500">
+                  <Upload className="w-4 h-4" />
+                  <span>Upload</span>
+                </Link>
                 <Link href="/live" className="block text-gray-300 hover:text-orange-500">Live Cams</Link>
               </nav>
             </div>

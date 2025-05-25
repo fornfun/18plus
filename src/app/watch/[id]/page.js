@@ -5,7 +5,26 @@ import { ArrowLeft, Heart, Share2, Download, ThumbsUp, ThumbsDown, Clock, Eye, S
 import Header from '@/components/Header';
 import VideoCard from '@/components/VideoCard';
 import Footer from '@/components/Footer';
-import { sampleVideos } from '@/data/sampleVideos';
+import { fetchVideoClient } from '@/lib/api';
+
+const TeraBoxPlayer = ({ teraId, title }) => {
+  const embedUrl = `https://player.terabox.tech/?url=https%3A%2F%2Fteraboxapp.com%2Fs%2F${teraId}`;
+  
+  return (
+    <div className="relative aspect-video bg-black rounded-lg overflow-hidden shadow-xl">
+      <iframe 
+        src={embedUrl}
+        width="100%"
+        height="100%"
+        frameBorder="0"
+        allowFullScreen
+        scrolling="no"
+        title={title}
+        className="w-full h-full rounded-lg"
+      />
+    </div>
+  );
+};
 
 const VideoPlayer = ({ videoUrl, poster }) => {
   const [quality, setQuality] = React.useState('1080p');
@@ -100,6 +119,8 @@ export default function WatchPage() {
   const router = useRouter();
   const [video, setVideo] = useState(null);
   const [relatedVideos, setRelatedVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isLiked, setIsLiked] = useState(false);
   const [isDisliked, setIsDisliked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -107,25 +128,53 @@ export default function WatchPage() {
 
   useEffect(() => {
     if (params?.id) {
-      const foundVideo = sampleVideos.find(v => v.id === parseInt(params.id));
-      setVideo(foundVideo);
+      setLoading(true);
+      setError(null);
       
-      // Get related videos (exclude current video)
-      const related = sampleVideos
-        .filter(v => v.id !== parseInt(params.id))
-        .slice(0, 12);
-      setRelatedVideos(related);
+      const loadVideo = async () => {
+        try {
+          const { video: fetchedVideo, relatedVideos: related } = await fetchVideoClient(params.id);
+          
+          if (fetchedVideo) {
+            setVideo(fetchedVideo);
+            setRelatedVideos(related || []);
+          } else {
+            setError('Video not found');
+          }
+        } catch (err) {
+          console.error('Error loading video:', err);
+          setError('Failed to load video');
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      loadVideo();
     }
   }, [params?.id]);
 
-  if (!video) {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white">
+        <Header />
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
+            <p className="text-gray-400 text-lg">Loading video...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !video) {
     return (
       <div className="min-h-screen bg-gray-900 text-white">
         <Header />
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="text-6xl mb-4">😕</div>
-            <p className="text-gray-400 text-lg">Video not found</p>
+            <p className="text-gray-400 text-lg">{error || 'Video not found'}</p>
             <button 
               onClick={() => router.push('/')}
               className="mt-4 bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors"
@@ -166,37 +215,78 @@ export default function WatchPage() {
             </button>
 
             {/* Video Player */}
-            <VideoPlayer videoUrl={video.videoUrl} poster={video.thumbnail} />
+            {video.tera_id ? (
+              <TeraBoxPlayer 
+                teraId={video.tera_id}
+                title={video.title || 'Untitled Video'}
+              />
+            ) : (
+              <VideoPlayer 
+                videoUrl={`https://teraboxapp.com/s/${video.tera_id}`} 
+                poster={video.poster || '/placeholder-video.jpg'} 
+              />
+            )}
 
             {/* Video Info */}
             <div className="mt-6 bg-gray-800 rounded-lg p-6">
-              <h1 className="text-2xl md:text-3xl font-bold mb-4 text-white leading-tight">{video.title}</h1>
+              <div className="flex items-center justify-between mb-4">
+                <h1 className="text-2xl md:text-3xl font-bold text-white leading-tight">
+                  {video.title || 'Untitled Video'}
+                </h1>
+                
+                {video.tera_id && (
+                  <div className="flex items-center space-x-3">
+                    <a 
+                      href={`https://teraboxapp.com/s/${video.tera_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>TeraBox</span>
+                    </a>
+                    <a 
+                      href={`https://teraboxapp.com/s/${video.tera_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download</span>
+                    </a>
+                  </div>
+                )}
+              </div>
               
               {/* Stats Row */}
               <div className="flex flex-wrap items-center justify-between mb-6 pb-4 border-b border-gray-700">
                 <div className="flex items-center space-x-6 text-gray-300">
                   <span className="flex items-center bg-gray-700 px-3 py-1 rounded-lg">
                     <Eye className="w-4 h-4 mr-2" />
-                    <span className="font-semibold">{video.views}</span> views
+                    <span className="font-semibold">{video.views || 0}</span> views
                   </span>
                   <span className="flex items-center bg-gray-700 px-3 py-1 rounded-lg">
                     <Clock className="w-4 h-4 mr-2" />
-                    {video.duration}
+                    {video.duration || 'N/A'}
                   </span>
                   <span className="flex items-center bg-gray-700 px-3 py-1 rounded-lg">
-                    <Star className="w-4 h-4 mr-2 fill-current text-yellow-500" />
-                    <span className="font-semibold">{video.rating}</span>/5
+                    <ThumbsUp className="w-4 h-4 mr-2 fill-current text-green-500" />
+                    <span className="font-semibold">{video.likes || 0}</span>
                   </span>
-                  <span className="text-gray-400">{video.uploadDate}</span>
+                  <span className="text-gray-400">
+                    {video.published_at ? new Date(video.published_at).toLocaleDateString() : 'Recently added'}
+                  </span>
                 </div>
                 
                 <div className="flex items-center space-x-2 mt-4 lg:mt-0">
                   <span className="bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold">
                     HD
                   </span>
-                  <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                    VERIFIED
-                  </span>
+                  {video.published && (
+                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                      VERIFIED
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -263,23 +353,36 @@ export default function WatchPage() {
                 <div>
                   <span className="text-gray-400 text-sm">Category: </span>
                   <span className="bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-                    {video.category}
+                    {video.category || 'General'}
                   </span>
                 </div>
                 
-                <div>
-                  <span className="text-gray-400 text-sm mb-2 block">Tags:</span>
-                  <div className="flex flex-wrap gap-2">
-                    {video.tags?.map((tag) => (
-                      <span
-                        key={tag}
-                        className="bg-gray-700 text-gray-300 px-3 py-1 rounded-full text-sm hover:bg-orange-500 hover:text-white cursor-pointer transition-colors"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
+                {video.description && (
+                  <div>
+                    <span className="text-gray-400 text-sm mb-2 block">Description:</span>
+                    <p className="text-gray-300 text-sm leading-relaxed">
+                      {video.description}
+                    </p>
                   </div>
-                </div>
+                )}
+                
+                {video.tags && (
+                  <div>
+                    <span className="text-gray-400 text-sm mb-2 block">Tags:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {(typeof video.tags === 'string' ? JSON.parse(video.tags) : video.tags)?.map((tag, index) => (
+                        <span
+                          key={index}
+                          className="bg-gray-700 text-gray-300 px-3 py-1 rounded-full text-sm hover:bg-orange-500 hover:text-white cursor-pointer transition-colors"
+                        >
+                          #{tag}
+                        </span>
+                      )) || (
+                        <span className="text-gray-500 text-sm">No tags available</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
