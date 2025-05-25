@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp, Play, Clock, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
-const TrendingVideos = ({ videos }) => {
+const TrendingVideos = ({ videos, onVideoPlay }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const trendingVideos = videos.slice(0, 6); // Get top 6 trending videos
 
@@ -14,6 +14,12 @@ const TrendingVideos = ({ videos }) => {
 
   const prevSlide = () => {
     setCurrentIndex((prev) => (prev - 1 + Math.max(1, trendingVideos.length - 2)) % Math.max(1, trendingVideos.length - 2));
+  };
+
+  const handleVideoClick = (video) => {
+    if (onVideoPlay) {
+      onVideoPlay(video);
+    }
   };
 
   return (
@@ -63,7 +69,10 @@ const TrendingVideos = ({ videos }) => {
             className="lg:col-span-2"
           >
             {trendingVideos[0] && (
-              <div className="relative group cursor-pointer">
+              <div 
+                className="relative group cursor-pointer"
+                onClick={() => handleVideoClick(trendingVideos[0])}
+              >
                 <div className="relative overflow-hidden rounded-2xl">
                   <img
                     src={trendingVideos[0].thumbnail}
@@ -77,6 +86,7 @@ const TrendingVideos = ({ videos }) => {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                     className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300"
+                    onClick={() => handleVideoClick(trendingVideos[0])}
                   >
                     <Play className="w-8 h-8 text-white ml-1" />
                   </motion.div>
@@ -123,6 +133,7 @@ const TrendingVideos = ({ videos }) => {
                 transition={{ duration: 0.5, delay: index * 0.1 }}
                 whileHover={{ scale: 1.02 }}
                 className="flex items-center space-x-4 bg-gray-800/50 hover:bg-gray-800 rounded-xl p-4 cursor-pointer transition-all duration-300 group"
+                onClick={() => handleVideoClick(video)}
               >
                 {/* Rank Number */}
                 <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
