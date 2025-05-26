@@ -316,7 +316,90 @@ export async function fetchCategoriesClient() {
 export async function fetchVideoClient(id) {
   try {
     console.log(`🎬 Fetching video ${id}`);
-    const response = await fetch(`/api/videos/${id}`);
+    
+    // Extract TeraID if possible
+    const extractTeraId = (id) => {
+      // Case 1: Plain TeraID (alphanumeric string)
+      if (/^[a-zA-Z0-9]+$/.test(id) && id.length >= 5 && !/^\d+$/.test(id)) {
+        console.log(`✅ Valid TeraID format: ${id}`);
+        return id;
+      }
+      
+      // Case 2: URL format (extract TeraID from it)
+      if (id.includes('teraboxapp.com/s/') || id.includes('terabox.com/s/')) {
+        const matches = id.match(/\/s\/([a-zA-Z0-9]+)/);
+        if (matches && matches[1]) {
+          console.log(`✅ Extracted TeraID from URL: ${matches[1]}`);
+          return matches[1];
+        }
+      }
+      
+      return null;
+    };
+    
+    // Try to extract TeraID from the ID
+    const teraId = extractTeraId(id);
+    
+    let directTeraBoxData = null;
+    if (teraId) {
+      console.log(`🔍 ID appears to be/contain a direct TeraBox ID: ${teraId}`);
+      try {
+        // Try to fetch metadata for this TeraBox ID directly
+        const metadataResponse = await fetch(`https://get-metadata.shraj.workers.dev/?url=https://teraboxapp.com/s/${teraId}`);
+        if (metadataResponse.ok) {
+          const metadata = await metadataResponse.json();
+          console.log(`✅ Successfully fetched TeraBox metadata directly for ${teraId}`);
+          
+          directTeraBoxData = {
+            id: teraId,
+            tera_id: teraId,
+            title: metadata.title || `TeraBox Video (${teraId})`,
+            poster: metadata.og_image || metadata.image || `https://teraboxapp.com/thumbnail/s/${teraId}.jpg`,
+            description: 'TeraBox Video',
+            views: 0,
+            likes: 0,
+            dislikes: 0,
+            created_at: new Date().toISOString()
+          };
+        } else {
+          // Even if metadata fails, still create a basic video object
+          directTeraBoxData = {
+            id: teraId,
+            tera_id: teraId,
+            title: `TeraBox Video (${teraId})`,
+            poster: `https://teraboxapp.com/thumbnail/s/${teraId}.jpg`,
+            description: 'TeraBox Video',
+            views: 0,
+            likes: 0,
+            dislikes: 0,
+            created_at: new Date().toISOString()
+          };
+        }
+      } catch (metadataError) {
+        console.warn(`⚠️ Failed to fetch TeraBox metadata directly: ${metadataError.message}`);
+        // Still create a fallback video object
+        directTeraBoxData = {
+          id: teraId,
+          tera_id: teraId,
+          title: `TeraBox Video (${teraId})`,
+          poster: `https://teraboxapp.com/thumbnail/s/${teraId}.jpg`,
+          description: 'TeraBox Video',
+          views: 0,
+          likes: 0,
+          dislikes: 0,
+          created_at: new Date().toISOString()
+        };
+      }
+    }
+    
+    // Always try to fetch from our API first
+    console.log(`🔄 Trying API fetch for ID: ${id}`);
+    const response = await fetch(`/api/videos/${id}`, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    });
     
     if (!response.ok) {
       let errorDetails = '';
@@ -324,6 +407,39 @@ export async function fetchVideoClient(id) {
         const errorResponse = await response.text();
         errorDetails = ` - ${errorResponse}`;
       } catch {}
+      
+      console.warn(`⚠️ API request failed: ${response.status}${errorDetails}`);
+      
+      // Return our directly fetched data if available, otherwise throw
+      if (directTeraBoxData) {
+        console.log(`🔄 Using directly fetched TeraBox data as fallback after API failure`);
+        return { 
+          video: directTeraBoxData, 
+          relatedVideos: [] 
+        };
+      }
+      
+      // If we have a teraId but no directTeraBoxData (which shouldn't happen due to our logic above)
+      // Create a video object anyway as ultimate fallback
+      if (teraId) {
+        console.log(`🔄 Creating ultimate fallback TeraBox video for ${teraId}`);
+        const ultimateFallbackVideo = {
+          id: teraId,
+          tera_id: teraId,
+          title: `TeraBox Video (${teraId})`,
+          poster: `https://teraboxapp.com/thumbnail/s/${teraId}.jpg`,
+          description: 'TeraBox Video',
+          views: 0,
+          likes: 0,
+          dislikes: 0,
+          created_at: new Date().toISOString()
+        };
+        
+        return { 
+          video: ultimateFallbackVideo, 
+          relatedVideos: [] 
+        };
+      }
       
       throw new Error(`Failed to fetch video (${response.status})${errorDetails}`);
     }
@@ -333,8 +449,27 @@ export async function fetchVideoClient(id) {
     
     if (data.video) {
       // Process the video data to ensure metadata
-      data.video = await processVideoData(data.video);
-      console.log(`🔄 Processed video data - Poster: ${data.video.poster ? 'Found' : 'Missing'}, TeraID: ${data.video.tera_id || 'Missing'}`);
+      const processedVideo = await processVideoData(data.video);
+      data.video = processedVideo;
+      console.log(`🔄 Processed video data - Poster: ${processedVideo.poster ? 'Found' : 'Missing'}, TeraID: ${processedVideo.tera_id || 'Missing'}`);
+    } else if (directTeraBoxData) {
+      // Use our directly fetched data as fallback
+      console.log(`🔄 Using directly fetched TeraBox data as fallback (API returned no video)`);
+      data.video = directTeraBoxData;
+    } else if (teraId) {
+      // Ultimate fallback - create a basic video object with the teraId
+      console.log(`🔄 Creating ultimate fallback TeraBox video for ${teraId}`);
+      data.video = {
+        id: teraId,
+        tera_id: teraId,
+        title: `TeraBox Video (${teraId})`,
+        poster: `https://teraboxapp.com/thumbnail/s/${teraId}.jpg`,
+        description: 'TeraBox Video',
+        views: 0,
+        likes: 0,
+        dislikes: 0,
+        created_at: new Date().toISOString()
+      };
     } else {
       console.warn(`⚠️ No video data found for ID: ${id}`);
     }

@@ -8,26 +8,39 @@ const TURSO_DB_SECRET="eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQi
 
 // Check if we're in build/SSG mode and DB connection isn't needed
 // Enhanced to handle more build environments (Vercel, Cloudflare, etc.)
+// In production, we should always attempt to connect to the database during runtime
+// Note: Edge runtime requires special handling
 const isBuildTime = 
+  // Next.js build phase
   (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE === 'phase-production-build') ||
-  (process.env.CF_PAGES_BRANCH && process.env.CF_PAGES && !process.env.CF_PAGES_URL) || // Only during Cloudflare Pages build, not runtime
-  (process.env.VERCEL_ENV === 'production' && process.env.VERCEL_BUILD_STEP) || // Only during Vercel build
-  (typeof process.env.NEXT_RUNTIME === 'undefined' && process.env.NODE_ENV === 'production'); // Edge functions during build
+  // Cloudflare Pages build (not runtime)
+  (process.env.CF_PAGES_BRANCH && process.env.CF_PAGES && !process.env.CF_PAGES_URL) || 
+  // Vercel build (not runtime)
+  (process.env.VERCEL_ENV === 'production' && process.env.VERCEL_BUILD_STEP);
 
 let client;
 let db;
 
-// Only create a real client if we're not in build time AND we have a DB URL
-if (!isBuildTime && TURSO_DB_URL) {
-  client = createClient({
-    url: TURSO_DB_URL,
-    authToken: TURSO_DB_SECRET,
-  });
+// Try/catch to handle Edge runtime errors gracefully
+try {
+  // Only create a real client if we're not in build time AND we have a DB URL
+  if (!isBuildTime && TURSO_DB_URL) {
+    client = createClient({
+      url: TURSO_DB_URL,
+      authToken: TURSO_DB_SECRET,
+    });
+    
+    db = drizzle(client, { schema });
+    console.log('✅ Successfully connected to Turso database');
+  } else {
+    throw new Error('Build-time or missing database credentials');
+  }
+} catch (error) {
+  // Log the error but don't crash
+  console.warn(`⚠️ Database connection error: ${error.message}`);
+  console.warn('Using mock DB client - limited functionality');
   
-  db = drizzle(client, { schema });
-} else {
-  // Provide a more robust mock database during build
-  console.warn('Using mock DB client for build - no actual DB operations will work');
+  // Provide a more robust mock database
   db = {
     select: () => ({ 
       from: () => ({ 

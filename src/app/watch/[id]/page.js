@@ -40,23 +40,53 @@ const TeraBoxPlayer = ({ teraId, title }) => {
   // Enhanced player with better error handling and dynamic loading
   const [playerLoaded, setPlayerLoaded] = useState(false);
   const [playerError, setPlayerError] = useState(false);
-  const embedUrl = `https://player.terabox.tech/?url=https%3A%2F%2Fteraboxapp.com%2Fs%2F${teraId}`;
+  const [playerSource, setPlayerSource] = useState('terabox');
+  
+  // Generate multiple player URLs to try if one fails
+  const teraboxEmbedUrl = `https://player.terabox.tech/?url=https%3A%2F%2Fteraboxapp.com%2Fs%2F${teraId}`;
+  const directTeraboxUrl = `https://teraboxapp.com/s/${teraId}`;
+  const alternativeEmbedUrl = `https://www.4funbox.com/s/${teraId}`;
   
   useEffect(() => {
     // Reset states when teraId changes
     setPlayerLoaded(false);
     setPlayerError(false);
     
+    // Verify if we have a valid teraId
+    if (!teraId || teraId.length < 5) {
+      console.error("❌ Invalid TeraID provided:", teraId);
+      setPlayerError(true);
+      return;
+    }
+    
+    console.log(`🎬 Setting up TeraBox player for ID: ${teraId}`);
+    
     // Add a timeout to detect if iframe fails to load
     const timeoutId = setTimeout(() => {
       if (!playerLoaded) {
         console.warn("⚠️ TeraBox player failed to load within timeout period");
-        setPlayerError(true);
+        
+        // Switch to alternative player source
+        if (playerSource === 'terabox') {
+          console.log("🔄 Trying alternative player source");
+          setPlayerSource('alternative');
+          
+          // Reset timeout to give alternative a chance
+          const altTimeoutId = setTimeout(() => {
+            if (!playerLoaded) {
+              setPlayerError(true);
+            }
+          }, 8000);
+          
+          return () => clearTimeout(altTimeoutId);
+        } else {
+          setPlayerError(true);
+        }
       }
     }, 8000); // 8 seconds timeout
     
     return () => clearTimeout(timeoutId);
-  }, [teraId]);
+  }, [teraId, playerSource]);
   
   const handleLoad = () => {
     console.log("✅ TeraBox player loaded successfully");
@@ -66,11 +96,17 @@ const TeraBoxPlayer = ({ teraId, title }) => {
   
   const handleError = () => {
     console.error("❌ Error loading TeraBox player");
-    setPlayerError(true);
+    if (playerSource === 'terabox') {
+      // Try alternative source
+      console.log("🔄 Switching to alternative player source after error");
+      setPlayerSource('alternative');
+    } else {
+      setPlayerError(true);
+    }
   };
   
-  // Alternative direct link for users
-  const directLink = `https://teraboxapp.com/s/${teraId}`;
+  // Get current embed URL based on source
+  const currentEmbedUrl = playerSource === 'terabox' ? teraboxEmbedUrl : alternativeEmbedUrl;
   
   return (
     <div className="relative aspect-video bg-black rounded-lg overflow-hidden shadow-xl">
@@ -78,28 +114,50 @@ const TeraBoxPlayer = ({ teraId, title }) => {
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white p-4">
           <div className="text-4xl mb-4">😕</div>
           <p className="text-xl mb-4">Player failed to load</p>
-          <a 
-            href={directLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors duration-300"
-          >
-            Open on TeraBox
-          </a>
+          <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-4">
+            <a 
+              href={directTeraboxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors duration-300 text-center"
+            >
+              Open on TeraBox
+            </a>
+            <a 
+              href={alternativeEmbedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-300 text-center"
+            >
+              Try Alternative Link
+            </a>
+          </div>
         </div>
       ) : (
-        <iframe 
-          src={embedUrl}
-          width="100%"
-          height="100%"
-          frameBorder="0"
-          allowFullScreen
-          scrolling="no"
-          title={title}
-          className="w-full h-full rounded-lg"
-          onLoad={handleLoad}
-          onError={handleError}
-        />
+        <>
+          <iframe 
+            src={currentEmbedUrl}
+            width="100%"
+            height="100%"
+            frameBorder="0"
+            allowFullScreen
+            scrolling="no"
+            title={title}
+            className="w-full h-full rounded-lg"
+            onLoad={handleLoad}
+            onError={handleError}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+          />
+          {!playerLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mb-2"></div>
+                <p className="text-white">Loading video player...</p>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -216,10 +274,28 @@ export default function WatchPage() {
           const extractedTeraId = extractTeraId(params.id);
           console.log(`🔍 Loading video details for ID: ${params.id} (Extracted TeraID: ${extractedTeraId || 'None'})`);
           
-          // If it looks like a direct TeraID, we can try to create a temporary video object
+          // Always create a temporary TeraBox video object with the ID
+          // This ensures we always have something to display even if the DB query fails
           let directTeraBoxVideo = null;
-          if (extractedTeraId && extractedTeraId !== params.id && /^[a-zA-Z0-9]+$/.test(extractedTeraId)) {
-            console.log(`🎬 Creating temporary TeraBox video player with direct TeraID: ${extractedTeraId}`);
+          
+          // First check if the params.id itself is likely a TeraID
+          if (/^[a-zA-Z0-9]+$/.test(params.id) && params.id.length >= 5 && !/^\d+$/.test(params.id)) {
+            console.log(`🎬 Creating temporary TeraBox video player with direct TeraID: ${params.id}`);
+            directTeraBoxVideo = {
+              id: params.id,
+              title: `TeraBox Video (${params.id})`,
+              tera_id: params.id,
+              poster: `https://teraboxapp.com/thumbnail/s/${params.id}.jpg`,
+              description: 'Loading video details...',
+              views: 0,
+              likes: 0,
+              dislikes: 0,
+              created_at: new Date().toISOString()
+            };
+          } 
+          // Then check if we extracted a different TeraID from the params
+          else if (extractedTeraId && extractedTeraId !== params.id) {
+            console.log(`🎬 Creating temporary TeraBox video player with extracted TeraID: ${extractedTeraId}`);
             directTeraBoxVideo = {
               id: extractedTeraId,
               title: `TeraBox Video (${extractedTeraId})`,
@@ -493,23 +569,47 @@ export default function WatchPage() {
               Back to videos
             </button>
 
-            {/* Video Player */}
-            {video.tera_id ? (
-              <TeraBoxPlayer 
-                teraId={video.tera_id}
-                title={video.title || 'Untitled Video'}
-              />
-            ) : extractTeraId(params.id) ? (
-              <TeraBoxPlayer 
-                teraId={extractTeraId(params.id)}
-                title={video.title || `Video ${params.id}`}
-              />
-            ) : (
-              <VideoPlayer 
-                videoUrl={video.video_url || ''}
-                poster={video.poster || '/placeholder-video.jpg'} 
-              />
-            )}
+            {/* Video Player - More resilient with fallbacks */}
+            {(() => {
+              // Case 1: Video has a tera_id - use it directly
+              if (video.tera_id) {
+                return (
+                  <TeraBoxPlayer 
+                    teraId={video.tera_id}
+                    title={video.title || 'Untitled Video'}
+                  />
+                );
+              }
+              
+              // Case 2: The params.id itself might be a valid TeraID
+              if (/^[a-zA-Z0-9]+$/.test(params.id) && params.id.length >= 5 && !/^\d+$/.test(params.id)) {
+                return (
+                  <TeraBoxPlayer 
+                    teraId={params.id}
+                    title={video.title || `TeraBox Video (${params.id})`}
+                  />
+                );
+              }
+              
+              // Case 3: We can extract a TeraID from params
+              const extractedId = extractTeraId(params.id);
+              if (extractedId) {
+                return (
+                  <TeraBoxPlayer 
+                    teraId={extractedId}
+                    title={video.title || `TeraBox Video (${extractedId})`}
+                  />
+                );
+              }
+              
+              // Case 4: Fallback to regular video player
+              return (
+                <VideoPlayer 
+                  videoUrl={video.video_url || ''}
+                  poster={video.poster || '/placeholder-video.jpg'} 
+                />
+              );
+            })()}
 
             {/* Video Info */}
             <div className="mt-6 bg-gray-800 rounded-lg p-6">
