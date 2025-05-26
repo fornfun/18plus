@@ -5,7 +5,7 @@ import { ArrowLeft, Heart, Share2, Download, ThumbsUp, ThumbsDown, Clock, Eye, S
 import Header from '@/components/Header';
 import VideoCard from '@/components/VideoCard';
 import Footer from '@/components/Footer';
-import { fetchVideoClient } from '@/lib/api';
+import { fetchVideoClient, fetchVideosClient } from '@/lib/api';
 
 const TeraBoxPlayer = ({ teraId, title }) => {
   const embedUrl = `https://player.terabox.tech/?url=https%3A%2F%2Fteraboxapp.com%2Fs%2F${teraId}`;
@@ -137,7 +137,29 @@ export default function WatchPage() {
           
           if (fetchedVideo) {
             setVideo(fetchedVideo);
-            setRelatedVideos(related || []);
+            
+            // If no related videos or less than minimum, fetch random videos
+            if (!related || related.length < 40) {
+              const { videos: randomVideos } = await fetchVideosClient({
+                limit: '40',
+                random: 'true',
+                sortBy: 'random'
+              });
+              // Filter out the current video from random videos
+              const filteredVideos = randomVideos.filter(v => v.id !== fetchedVideo.id);
+              setRelatedVideos(filteredVideos);
+            } else {
+              setRelatedVideos(related);
+            }
+
+            // Increment view count
+            try {
+              await fetch(`/api/videos/${params.id}/views`, {
+                method: 'POST',
+              });
+            } catch (viewError) {
+              console.error('Error updating view count:', viewError);
+            }
           } else {
             setError('Video not found');
           }
@@ -187,16 +209,158 @@ export default function WatchPage() {
     );
   }
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    if (isDisliked) setIsDisliked(false);
+  const handleLike = async () => {
+    try {
+      const action = isLiked ? 'unlike' : 'like';
+      
+      // Optimistic update
+      const oldLikes = video.likes || 0;
+      const newLikes = action === 'like' ? oldLikes + 1 : Math.max(0, oldLikes - 1);
+      setIsLiked(!isLiked);
+      if (isDisliked) {
+        setIsDisliked(false);
+        setVideo(prev => ({ 
+          ...prev, 
+          likes: newLikes,
+          dislikes: Math.max(0, (prev.dislikes || 0) - 1)
+        }));
+      } else {
+        setVideo(prev => ({ ...prev, likes: newLikes }));
+      }
+
+      const response = await fetch(`/api/videos/${params.id}/like`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        // Revert optimistic update on error
+        setIsLiked(!isLiked);
+        if (isDisliked) setIsDisliked(true);
+        setVideo(prev => ({ ...prev, likes: oldLikes }));
+        throw new Error('Failed to update like');
+      }
+    } catch (error) {
+      console.error('Error liking video:', error);
+    }
   };
 
-  const handleDislike = () => {
-    setIsDisliked(!isDisliked);
-    if (isLiked) setIsLiked(false);
+  const handleDislike = async () => {
+    try {
+      const action = isDisliked ? 'undislike' : 'dislike';
+      
+      // Optimistic update
+      const oldDislikes = video.dislikes || 0;
+      const newDislikes = action === 'dislike' ? oldDislikes + 1 : Math.max(0, oldDislikes - 1);
+      setIsDisliked(!isDisliked);
+      if (isLiked) {
+        setIsLiked(false);
+        setVideo(prev => ({ 
+          ...prev, 
+          dislikes: newDislikes,
+          likes: Math.max(0, (prev.likes || 0) - 1)
+        }));
+      } else {
+        setVideo(prev => ({ ...prev, dislikes: newDislikes }));
+      }
+
+      const response = await fetch(`/api/videos/${params.id}/dislike`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        // Revert optimistic update on error
+        setIsDisliked(!isDisliked);
+        if (isLiked) setIsLiked(true);
+        setVideo(prev => ({ ...prev, dislikes: oldDislikes }));
+        throw new Error('Failed to update dislike');
+      }
+    } catch (error) {
+      console.error('Error disliking video:', error);
+    }
   };
 
+  const handleBookmark = async () => {
+    try {
+      const action = isBookmarked ? 'unbookmark' : 'bookmark';
+      
+      // Optimistic update
+      const oldBookmarks = video.bookmarks || 0;
+      const newBookmarks = action === 'bookmark' ? oldBookmarks + 1 : Math.max(0, oldBookmarks - 1);
+      setIsBookmarked(!isBookmarked);
+      setVideo(prev => ({ ...prev, bookmarks: newBookmarks }));
+
+      const response = await fetch(`/api/videos/${params.id}/bookmark`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        // Revert optimistic update on error
+        setIsBookmarked(!isBookmarked);
+        setVideo(prev => ({ ...prev, bookmarks: oldBookmarks }));
+        throw new Error('Failed to update bookmark');
+      }
+    } catch (error) {
+      console.error('Error bookmarking video:', error);
+    }
+  };
+
+  const handleFavorite = async () => {
+    try {
+      const action = isFavorited ? 'unfavorite' : 'favorite';
+      
+      // Optimistic update
+      const oldFavorites = video.favorites || 0;
+      const newFavorites = action === 'favorite' ? oldFavorites + 1 : Math.max(0, oldFavorites - 1);
+      setIsFavorited(!isFavorited);
+      setVideo(prev => ({ ...prev, favorites: newFavorites }));
+
+      const response = await fetch(`/api/videos/${params.id}/favorite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        // Revert optimistic update on error
+        setIsFavorited(!isFavorited);
+        setVideo(prev => ({ ...prev, favorites: oldFavorites }));
+        throw new Error('Failed to update favorite');
+      }
+    } catch (error) {
+      console.error('Error favoriting video:', error);
+    }
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: video.title,
+        text: video.description || `Check out this video: ${video.title}`,
+        url: window.location.href
+      }).catch((error) => console.error('Error sharing:', error));
+    } else {
+      // Fallback for browsers that don't support navigator.share
+      navigator.clipboard.writeText(window.location.href)
+        .then(() => alert('Link copied to clipboard!'))
+        .catch((error) => console.error('Error copying to clipboard:', error));
+    }
+  };
+
+  // Update the button onClick handlers
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <Header />
@@ -273,6 +437,18 @@ export default function WatchPage() {
                     <ThumbsUp className="w-4 h-4 mr-2 fill-current text-green-500" />
                     <span className="font-semibold">{video.likes || 0}</span>
                   </span>
+                  <span className="flex items-center bg-gray-700 px-3 py-1 rounded-lg">
+                    <ThumbsDown className="w-4 h-4 mr-2 fill-current text-red-500" />
+                    <span className="font-semibold">{video.dislikes || 0}</span>
+                  </span>
+                  <span className="flex items-center bg-gray-700 px-3 py-1 rounded-lg">
+                    <Heart className="w-4 h-4 mr-2 fill-current text-pink-500" />
+                    <span className="font-semibold">{video.favorites || 0}</span>
+                  </span>
+                  <span className="flex items-center bg-gray-700 px-3 py-1 rounded-lg">
+                    <Bookmark className="w-4 h-4 mr-2 fill-current text-blue-500" />
+                    <span className="font-semibold">{video.bookmarks || 0}</span>
+                  </span>
                   <span className="text-gray-400">
                     {video.published_at ? new Date(video.published_at).toLocaleDateString() : 'Recently added'}
                   </span>
@@ -313,7 +489,7 @@ export default function WatchPage() {
                 </button>
                 
                 <button
-                  onClick={() => setIsFavorited(!isFavorited)}
+                  onClick={handleFavorite}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-300 ${
                     isFavorited ? 'bg-pink-600 text-white shadow-lg' : 'bg-gray-700 text-gray-300 hover:bg-pink-600 hover:text-white'
                   }`}
@@ -323,7 +499,7 @@ export default function WatchPage() {
                 </button>
                 
                 <button
-                  onClick={() => setIsBookmarked(!isBookmarked)}
+                  onClick={handleBookmark}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-300 ${
                     isBookmarked ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-700 text-gray-300 hover:bg-blue-600 hover:text-white'
                   }`}
@@ -332,7 +508,10 @@ export default function WatchPage() {
                   <span className="font-medium">Save</span>
                 </button>
                 
-                <button className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-gray-300 hover:bg-orange-600 hover:text-white rounded-lg transition-all duration-300">
+                <button 
+                  onClick={handleShare}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-gray-300 hover:bg-orange-600 hover:text-white rounded-lg transition-all duration-300"
+                >
                   <Share2 className="w-4 h-4" />
                   <span className="font-medium">Share</span>
                 </button>

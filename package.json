@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack -p 3001",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -17,13 +17,13 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "node scripts/seed-videos.js",
     "update-metadata": "node scripts/update-metadata.js",
+    "update-posters": "node scripts/update-poster-urls.js",
     "test-infinite-scroll": "node scripts/test-infinite-scroll.js",
     "publish-videos": "node -e \"import { db } from './src/db/index.js'; import { videos } from './src/db/schema.js'; import { sql } from 'drizzle-orm'; const publish = async () => { await db.update(videos).set({ published: true, published_at: new Date().toISOString() }).where(sql\\`id BETWEEN 101 AND 500\\`); console.log('Published videos 101-500'); }; publish();\""
   },
   "dependencies": {
     "@libsql/client": "^0.15.7",
     "dotenv": "^16.5.0",
-    "drizzle-kit": "^0.31.1",
     "drizzle-orm": "^0.43.1",
     "framer-motion": "^12.12.2",
     "lucide-react": "^0.511.0",
@@ -36,6 +36,7 @@
     "@cloudflare/next-on-pages": "^1.13.12",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "drizzle-kit": "^0.31.1",
     "eslint": "^9",
     "eslint-config-next": "15.3.2",
     "tailwindcss": "^4"

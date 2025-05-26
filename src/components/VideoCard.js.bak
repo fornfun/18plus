@@ -1,13 +1,11 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Play, Clock, Eye, Star, Heart, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
 const VideoCard = ({ video }) => {
   const [isLiked, setIsLiked] = useState(false);
-  const [imgError, setImgError] = useState(false);
-  const [posterUrl, setPosterUrl] = useState(video.poster || video.thumbnail || '/placeholder-video.jpg');
 
   const handleLike = (e) => {
     e.preventDefault();
@@ -25,6 +23,7 @@ const VideoCard = ({ video }) => {
   const videoUrl = video.tera_id ? `/watch/${video.tera_id}` : `/watch/${video.id}`;
 
   // Handle image error (missing or broken poster)
+  const [imgError, setImgError] = useState(false);
   const [isPosterFetching, setIsPosterFetching] = useState(false);
   
   // Function to fetch and update poster if missing
@@ -82,7 +81,6 @@ const VideoCard = ({ video }) => {
               setImgError(true);
               fetchPosterIfNeeded();
             }}
-/>
           
           {/* Gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

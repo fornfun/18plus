@@ -17,7 +17,6 @@ export default function HomePage() {
   const [isRandomFeed, setIsRandomFeed] = useState(false);
   const [sortBy, setSortBy] = useState('created_at');
   const [order, setOrder] = useState('desc');
-  const [totalVideos, setTotalVideos] = useState(0);
 
   // Fetch categories on component mount
   useEffect(() => {
@@ -43,13 +42,6 @@ export default function HomePage() {
           order: 'desc'
         });
         setTrendingVideos(trending);
-        
-        // Also fetch total video count
-        const { pagination } = await fetchVideosClient({
-          limit: '1',
-          page: '1'
-        });
-        setTotalVideos(pagination.total || 0);
       } catch (err) {
         console.error('Error loading trending videos:', err);
       } finally {
@@ -87,9 +79,9 @@ export default function HomePage() {
               <span className="text-white">Plus</span>
             </h1>
             <p className="text-xl text-gray-300 mb-4">Premium Adult Entertainment</p>
-            {totalVideos > 0 && (
+            {1 > 0 && (
               <p className="text-lg text-orange-400 mb-8 font-semibold">
-                🎬 {totalVideos.toLocaleString()} Premium Videos Available
+                🎬 Premium Videos Available
               </p>
             )}
             <div className="flex justify-center items-center space-x-6 text-sm text-gray-400">

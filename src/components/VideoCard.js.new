@@ -7,6 +7,7 @@ import Image from 'next/image';
 const VideoCard = ({ video }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [isPosterFetching, setIsPosterFetching] = useState(false);
   const [posterUrl, setPosterUrl] = useState(video.poster || video.thumbnail || '/placeholder-video.jpg');
 
   const handleLike = (e) => {
@@ -20,36 +21,47 @@ const VideoCard = ({ video }) => {
     e.stopPropagation();
     // Share functionality
   };
-
-  // Determine the URL to use - prefer tera_id if available, fallback to numeric id
-  const videoUrl = video.tera_id ? `/watch/${video.tera_id}` : `/watch/${video.id}`;
-
-  // Handle image error (missing or broken poster)
-  const [isPosterFetching, setIsPosterFetching] = useState(false);
   
   // Function to fetch and update poster if missing
   const fetchPosterIfNeeded = async () => {
     // Only do this if we have tera_id and the poster is missing or failed to load
     if (video.tera_id && (!video.poster || imgError) && !isPosterFetching) {
+      console.log(`🔍 Fetching poster for video ${video.id} with teraId ${video.tera_id}`);
       setIsPosterFetching(true);
       
       try {
-        // Use the API route
-        const response = await fetch(`/api/videos/${video.id}/metadata`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            action: 'fetchPoster',
-            tera_id: video.tera_id
-          }),
+        // Try to fetch OG image directly
+        const teraboxUrl = `https://teraboxapp.com/s/${video.tera_id}`;
+        const proxyUrl = 'https://corsproxy.io/?';
+        
+        const response = await fetch(proxyUrl + encodeURIComponent(teraboxUrl), {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
         });
         
         if (response.ok) {
-          const data = await response.json();
-          if (data.poster) {
-            // Update video object locally without re-rendering the whole component
-            video.poster = data.poster;
+          const html = await response.text();
+          
+          // Extract OG image using regex
+          const ogImageMatch = html.match(/<meta\\s+property="og:image"\\s+content="([^"]+)"/i);
+          const newPosterUrl = ogImageMatch ? ogImageMatch[1] : null;
+          
+          if (newPosterUrl) {
+            console.log(`✅ Found poster for video ${video.id}: ${newPosterUrl.substring(0, 30)}...`);
+            setPosterUrl(newPosterUrl);
             setImgError(false);
+            
+            // Update in database
+            try {
+              await fetch(`/api/videos/${video.id}/metadata`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poster: newPosterUrl }),
+              });
+            } catch (err) {
+              console.error('Failed to update poster in database:', err);
+            }
           }
         }
       } catch (err) {
@@ -60,29 +72,35 @@ const VideoCard = ({ video }) => {
     }
   };
   
-  // If poster is missing, try to fetch it
-  React.useEffect(() => {
-    if (!video.poster && video.tera_id) {
+  // If poster is missing, try to fetch it on mount
+  useEffect(() => {
+    if ((!video.poster || video.poster === '/placeholder-video.jpg') && video.tera_id) {
       fetchPosterIfNeeded();
     }
-  }, [video.id, video.tera_id]);
-  
+  }, [video.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Determine the URL to use - prefer tera_id if available, fallback to numeric id
+  const videoUrl = video.tera_id ? `/watch/${video.tera_id}` : `/watch/${video.id}`;
+
   return (
     <Link href={videoUrl} className="group block">
       <div className="bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-all duration-300 hover:scale-105 hover:shadow-xl">
         {/* Thumbnail */}
         <div className="relative aspect-video bg-gray-700">
           <Image
-            src={video.poster || video.thumbnail || '/placeholder-video.jpg'}
+            src={posterUrl}
             alt={video.title || 'Video'}
             fill
             className="object-cover group-hover:scale-110 transition-transform duration-500"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             onError={() => {
-              setImgError(true);
-              fetchPosterIfNeeded();
+              if (!imgError) {
+                setImgError(true);
+                setPosterUrl('/placeholder-video.jpg');
+                fetchPosterIfNeeded();
+              }
             }}
-/>
+          />
           
           {/* Gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -119,6 +137,13 @@ const VideoCard = ({ video }) => {
               <Share2 className="w-4 h-4 text-white" />
             </button>
           </div>
+          
+          {/* Poster fetching indicator */}
+          {isPosterFetching && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-orange-500"></div>
+            </div>
+          )}
         </div>
         
         {/* Video info */}

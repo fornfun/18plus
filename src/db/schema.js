@@ -16,6 +16,8 @@ export const videos = sqliteTable('videos', {
   likes: integer('likes').default(0),
   dislikes: integer('dislikes').default(0),
   comments: integer('comments').default(0),
+  bookmarks: integer('bookmarks').default(0),
+  favorites: integer('favorites').default(0),
   published: integer('published', { mode: 'boolean' }).default(false),
   published_at: text('published_at'),
   authorId: text('authorId'),

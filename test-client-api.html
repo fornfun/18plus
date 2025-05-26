@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Client API</title>
+</head>
+<body>
+    <h1>Testing Client API</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testAPI() {
+            try {
+                console.log('Testing API call...');
+                const response = await fetch('/api/videos?page=1&limit=5');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('API Response:', data);
+                
+                document.getElementById('results').innerHTML = `
+                    <h2>Success!</h2>
+                    <p>Received ${data.videos?.length || 0} videos</p>
+                    <p>Total: ${data.pagination?.total || 0}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                console.error('API Error:', error);
+                document.getElementById('results').innerHTML = `
+                    <h2>Error!</h2>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        // Test when page loads
+        window.onload = testAPI;
+    </script>
+</body>
+</html>
