@@ -3,6 +3,8 @@ import { db } from '@/db';
 import { videos } from '@/db/schema';
 import { sql } from 'drizzle-orm';
 
+  export const runtime = 'edge';
+  
 // GET /api/stats - Get site statistics
 export async function GET() {
   try {

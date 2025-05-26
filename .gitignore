@@ -9,10 +9,10 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
+.wrangler/
 # testing
 /coverage
-
+/scripts
 # next.js
 /.next/
 /out/

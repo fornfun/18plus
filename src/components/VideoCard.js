@@ -32,9 +32,40 @@ const VideoCard = ({ video }) => {
     // Only do this if we have tera_id and the poster is missing or failed to load
     if (video.tera_id && (!video.poster || imgError) && !isPosterFetching) {
       setIsPosterFetching(true);
+      console.log(`🖼️ Fetching poster for video ${video.id} with tera_id ${video.tera_id}`);
       
       try {
-        // Use the API route
+        // Try direct metadata service first as it's more reliable in edge environments
+        try {
+          const metadataResponse = await fetch(`https://get-metadata.shraj.workers.dev/?url=https://teraboxapp.com/s/${video.tera_id}`);
+          
+          if (metadataResponse.ok) {
+            const metadata = await metadataResponse.json();
+            
+            if (metadata.image) {
+              console.log(`✅ Successfully fetched poster from metadata service for video ${video.id}`);
+              video.poster = metadata.image;
+              setPosterUrl(metadata.image);
+              setImgError(false);
+              
+              // Also update in DB if possible (don't await this)
+              fetch(`/api/videos/${video.id}/metadata`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  poster: metadata.image
+                }),
+              }).catch(err => console.error('Failed to update poster in DB:', err));
+              
+              setIsPosterFetching(false);
+              return; // Exit early if we got the poster
+            }
+          }
+        } catch (metadataErr) {
+          console.warn(`⚠️ Metadata service failed, falling back to API route:`, metadataErr);
+        }
+        
+        // Fallback to API route
         const response = await fetch(`/api/videos/${video.id}/metadata`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -47,13 +78,19 @@ const VideoCard = ({ video }) => {
         if (response.ok) {
           const data = await response.json();
           if (data.poster) {
+            console.log(`✅ Successfully fetched poster from API for video ${video.id}`);
             // Update video object locally without re-rendering the whole component
             video.poster = data.poster;
+            setPosterUrl(data.poster);
             setImgError(false);
+          } else {
+            console.warn(`⚠️ No poster returned from API for video ${video.id}`);
           }
+        } else {
+          console.error(`❌ API returned status ${response.status} for video ${video.id}`);
         }
       } catch (err) {
-        console.error('Failed to fetch poster:', err);
+        console.error('❌ Failed to fetch poster:', err);
       } finally {
         setIsPosterFetching(false);
       }
@@ -73,15 +110,20 @@ const VideoCard = ({ video }) => {
         {/* Thumbnail */}
         <div className="relative aspect-video bg-gray-700">
           <Image
-            src={video.poster || video.thumbnail || '/placeholder-video.jpg'}
+            src={posterUrl || video.poster || video.thumbnail || '/placeholder-video.jpg'}
             alt={video.title || 'Video'}
             fill
             className="object-cover group-hover:scale-110 transition-transform duration-500"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             onError={() => {
+              console.warn(`⚠️ Image error for video ${video.id}, trying to fetch poster`);
               setImgError(true);
+              setPosterUrl('/placeholder-video.jpg'); // Use placeholder immediately
               fetchPosterIfNeeded();
             }}
+            priority={false}
+            loading="lazy"
+            unoptimized={true} // This helps with external images in edge environments
 />
           
           {/* Gradient overlay */}

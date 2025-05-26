@@ -3,6 +3,8 @@ import { db } from '@/db';
 import { videos } from '@/db/schema';
 import { sql } from 'drizzle-orm';
 
+  export const runtime = 'edge';
+  
 // GET /api/categories - Get all unique categories
 export async function GET() {
   try {

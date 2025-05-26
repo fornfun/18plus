@@ -7,21 +7,73 @@ import VideoCard from '@/components/VideoCard';
 import Footer from '@/components/Footer';
 import { fetchVideoClient, fetchVideosClient } from '@/lib/api';
 
+export const runtime = 'edge';
+
 const TeraBoxPlayer = ({ teraId, title }) => {
+  // Enhanced player with better error handling and dynamic loading
+  const [playerLoaded, setPlayerLoaded] = useState(false);
+  const [playerError, setPlayerError] = useState(false);
   const embedUrl = `https://player.terabox.tech/?url=https%3A%2F%2Fteraboxapp.com%2Fs%2F${teraId}`;
+  
+  useEffect(() => {
+    // Reset states when teraId changes
+    setPlayerLoaded(false);
+    setPlayerError(false);
+    
+    // Add a timeout to detect if iframe fails to load
+    const timeoutId = setTimeout(() => {
+      if (!playerLoaded) {
+        console.warn("⚠️ TeraBox player failed to load within timeout period");
+        setPlayerError(true);
+      }
+    }, 8000); // 8 seconds timeout
+    
+    return () => clearTimeout(timeoutId);
+  }, [teraId]);
+  
+  const handleLoad = () => {
+    console.log("✅ TeraBox player loaded successfully");
+    setPlayerLoaded(true);
+    setPlayerError(false);
+  };
+  
+  const handleError = () => {
+    console.error("❌ Error loading TeraBox player");
+    setPlayerError(true);
+  };
+  
+  // Alternative direct link for users
+  const directLink = `https://teraboxapp.com/s/${teraId}`;
   
   return (
     <div className="relative aspect-video bg-black rounded-lg overflow-hidden shadow-xl">
-      <iframe 
-        src={embedUrl}
-        width="100%"
-        height="100%"
-        frameBorder="0"
-        allowFullScreen
-        scrolling="no"
-        title={title}
-        className="w-full h-full rounded-lg"
-      />
+      {playerError ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white p-4">
+          <div className="text-4xl mb-4">😕</div>
+          <p className="text-xl mb-4">Player failed to load</p>
+          <a 
+            href={directLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors duration-300"
+          >
+            Open on TeraBox
+          </a>
+        </div>
+      ) : (
+        <iframe 
+          src={embedUrl}
+          width="100%"
+          height="100%"
+          frameBorder="0"
+          allowFullScreen
+          scrolling="no"
+          title={title}
+          className="w-full h-full rounded-lg"
+          onLoad={handleLoad}
+          onError={handleError}
+        />
+      )}
     </div>
   );
 };
@@ -133,39 +185,49 @@ export default function WatchPage() {
       
       const loadVideo = async () => {
         try {
+          console.log(`🔍 Loading video details for ID: ${params.id}`);
           const { video: fetchedVideo, relatedVideos: related } = await fetchVideoClient(params.id);
           
           if (fetchedVideo) {
+            console.log(`✅ Video loaded successfully: ${fetchedVideo.title}`);
             setVideo(fetchedVideo);
             
             // If no related videos or less than minimum, fetch random videos
-            if (!related || related.length < 40) {
-              const { videos: randomVideos } = await fetchVideosClient({
-                limit: '40',
-                random: 'true',
-                sortBy: 'random'
-              });
-              // Filter out the current video from random videos
-              const filteredVideos = randomVideos.filter(v => v.id !== fetchedVideo.id);
-              setRelatedVideos(filteredVideos);
+            if (!related || related.length < 20) {
+              console.log(`⚠️ Insufficient related videos (${related?.length || 0}), fetching random videos`);
+              
+              try {
+                const { videos: randomVideos } = await fetchVideosClient({
+                  limit: '40',
+                  random: 'true',
+                  sortBy: 'random'
+                });
+                
+                // Filter out the current video from random videos
+                const filteredVideos = randomVideos.filter(v => v.id !== fetchedVideo.id);
+                console.log(`✅ Fetched ${filteredVideos.length} random videos as alternatives`);
+                setRelatedVideos(filteredVideos);
+              } catch (randomError) {
+                console.error('❌ Error fetching random videos:', randomError);
+                // Still show the main video even if related videos fail
+                setRelatedVideos([]);
+              }
             } else {
+              console.log(`✅ Using ${related.length} related videos`);
               setRelatedVideos(related);
             }
 
-            // Increment view count
-            try {
-              await fetch(`/api/videos/${params.id}/views`, {
-                method: 'POST',
-              });
-            } catch (viewError) {
-              console.error('Error updating view count:', viewError);
-            }
+            // Increment view count - don't block the UI if this fails
+            fetch(`/api/videos/${params.id}/views`, { method: 'POST' })
+              .catch(viewError => console.error('❌ Error updating view count:', viewError));
+            
           } else {
+            console.warn(`⚠️ No video found with ID: ${params.id}`);
             setError('Video not found');
           }
         } catch (err) {
-          console.error('Error loading video:', err);
-          setError('Failed to load video');
+          console.error('❌ Error loading video:', err);
+          setError(`Failed to load video: ${err.message || 'Unknown error'}`);
         } finally {
           setLoading(false);
         }

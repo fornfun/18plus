@@ -1,8 +1,12 @@
 // API utility functions for fetching video data
 
+// Use the actual production URL for API calls
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
   ? 'https://18plus.pages.dev' 
   : 'http://localhost:3000';
+
+// Fallback values to use if we're in Cloudflare Pages
+const CLOUDFLARE_ENABLED = typeof globalThis.caches !== 'undefined';
 
 // Helper function to fetch metadata if missing
 async function fetchMetadata(teraId) {
@@ -311,21 +315,33 @@ export async function fetchCategoriesClient() {
 
 export async function fetchVideoClient(id) {
   try {
+    console.log(`🎬 Fetching video ${id}`);
     const response = await fetch(`/api/videos/${id}`);
     
     if (!response.ok) {
-      throw new Error('Failed to fetch video');
+      let errorDetails = '';
+      try {
+        const errorResponse = await response.text();
+        errorDetails = ` - ${errorResponse}`;
+      } catch {}
+      
+      throw new Error(`Failed to fetch video (${response.status})${errorDetails}`);
     }
     
     const data = await response.json();
+    console.log(`📺 Video data received:`, data.video ? `ID: ${data.video.id}, Title: ${data.video.title?.substring(0, 30) || 'No title'}...` : 'No video data');
+    
     if (data.video) {
       // Process the video data to ensure metadata
       data.video = await processVideoData(data.video);
+      console.log(`🔄 Processed video data - Poster: ${data.video.poster ? 'Found' : 'Missing'}, TeraID: ${data.video.tera_id || 'Missing'}`);
+    } else {
+      console.warn(`⚠️ No video data found for ID: ${id}`);
     }
     
     return data;
   } catch (error) {
-    console.error('Error fetching video:', error);
+    console.error('❌ Error fetching video:', error);
     return { video: null, relatedVideos: [] };
   }
 }
