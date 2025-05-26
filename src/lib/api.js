@@ -1,7 +1,7 @@
 // API utility functions for fetching video data
 
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://your-domain.com' 
+  ? 'https://18plus.pages.dev' 
   : 'http://localhost:3000';
 
 // Helper function to fetch metadata if missing
@@ -180,7 +180,12 @@ export async function fetchVideos({
       params.append('search', search);
     }
     
-    const response = await fetch(`${API_BASE_URL}/api/videos?${params}`);
+    // Use relative URL in browser environment, API_BASE_URL otherwise
+    const url = typeof window !== 'undefined' 
+      ? `/api/videos?${params}` 
+      : `${API_BASE_URL}/api/videos?${params}`;
+      
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error('Failed to fetch videos');
@@ -195,7 +200,12 @@ export async function fetchVideos({
 
 export async function fetchVideo(id) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/videos/${id}`);
+    // Use relative URL in browser environment, API_BASE_URL otherwise
+    const url = typeof window !== 'undefined' 
+      ? `/api/videos/${id}` 
+      : `${API_BASE_URL}/api/videos/${id}`;
+      
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error('Failed to fetch video');
@@ -210,7 +220,12 @@ export async function fetchVideo(id) {
 
 export async function fetchCategories() {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/categories`);
+    // Use relative URL in browser environment, API_BASE_URL otherwise
+    const url = typeof window !== 'undefined' 
+      ? `/api/categories` 
+      : `${API_BASE_URL}/api/categories`;
+      
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error('Failed to fetch categories');
@@ -227,28 +242,67 @@ export async function fetchCategories() {
 export async function fetchVideosClient(params = {}) {
   try {
     const queryParams = new URLSearchParams(params);
-    const response = await fetch(`/api/videos?${queryParams}`);
+    
+    // Determine if we're in a browser environment
+    const isBrowser = typeof window !== 'undefined';
+    
+    // Use relative URL in browser, absolute URL in Node.js scripts
+    const url = isBrowser 
+      ? `/api/videos?${queryParams}` 
+      : `${API_BASE_URL}/api/videos?${queryParams}`;
+      
+    console.log('🔄 Fetching videos from:', url);
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
-      throw new Error('Failed to fetch videos');
+      // Get more details about the error
+      let errorDetails = '';
+      try {
+        const errorResponse = await response.text();
+        errorDetails = ` - ${errorResponse}`;
+      } catch {}
+      
+      throw new Error(`Failed to fetch videos (${response.status})${errorDetails}`);
     }
     
-    return await response.json();
+    const data = await response.json();
+    console.log(`✅ Successfully fetched videos: ${data.videos?.length || 0} items`);
+    return data;
   } catch (error) {
-    console.error('Error fetching videos:', error);
+    console.error('❌ Error fetching videos:', error.message);
     return { videos: [], pagination: { page: 1, limit: 20, total: 0, pages: 0 } };
   }
 }
 
 export async function fetchCategoriesClient() {
   try {
-    const response = await fetch('/api/categories');
+    // Determine if we're in a browser environment
+    const isBrowser = typeof window !== 'undefined';
+    
+    // Use relative URL in browser, absolute URL in Node.js scripts
+    const url = isBrowser 
+      ? '/api/categories' 
+      : `${API_BASE_URL}/api/categories`;
+      
+    console.log('🔄 Fetching categories from:', url);
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
-      throw new Error('Failed to fetch categories');
+      // Get more details about the error
+      let errorDetails = '';
+      try {
+        const errorResponse = await response.text();
+        errorDetails = ` - ${errorResponse}`;
+      } catch {}
+      
+      throw new Error(`Failed to fetch categories (${response.status})${errorDetails}`);
     }
     
-    return await response.json();
+    const data = await response.json();
+    console.log(`✅ Successfully fetched categories: ${data.categories?.length || 0} items`);
+    return data;
   } catch (error) {
     console.error('Error fetching categories:', error);
     return { categories: ['All'] };

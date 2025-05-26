@@ -6,13 +6,28 @@ import { sql } from 'drizzle-orm';
 // GET /api/categories - Get all unique categories
 export async function GET() {
   try {
-    const categoryResults = await db
-      .select({ category: videos.category })
-      .from(videos)
-      .where(sql`${videos.category} IS NOT NULL AND ${videos.category} != ''`)
-      .groupBy(videos.category);
+    // Check if we're in build time with mock DB
+    const isBuildTime = 
+      (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE === 'phase-production-build') ||
+      process.env.CF_PAGES_BRANCH || // Cloudflare Pages build
+      process.env.VERCEL_ENV === 'production'; // Vercel build
     
-    const categories = ['All', ...categoryResults.map(row => row.category).filter(Boolean)];
+    let categories = ['All'];
+    
+    if (!isBuildTime) {
+      try {
+        // Only query the DB if we're not in build time
+        const categoryResults = await db
+          .select({ category: videos.category })
+          .from(videos)
+          .where(sql`${videos.category} IS NOT NULL AND ${videos.category} != ''`)
+          .groupBy(videos.category);
+        
+        categories = ['All', ...categoryResults.map(row => row.category).filter(Boolean)];
+      } catch (dbError) {
+        console.warn('DB query failed in categories, using fallback:', dbError);
+      }
+    } 
     
     return NextResponse.json({ categories });
     

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbopack -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -19,6 +19,7 @@
     "update-metadata": "node scripts/update-metadata.js",
     "update-posters": "node scripts/update-poster-urls.js",
     "test-infinite-scroll": "node scripts/test-infinite-scroll.js",
+    "test-api": "node scripts/test-api-connection.js",
     "publish-videos": "node -e \"import { db } from './src/db/index.js'; import { videos } from './src/db/schema.js'; import { sql } from 'drizzle-orm'; const publish = async () => { await db.update(videos).set({ published: true, published_at: new Date().toISOString() }).where(sql\\`id BETWEEN 101 AND 500\\`); console.log('Published videos 101-500'); }; publish();\""
   },
   "dependencies": {
