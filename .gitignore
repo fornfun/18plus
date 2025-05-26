@@ -12,7 +12,9 @@
 .wrangler/
 # testing
 /coverage
-/scripts
+/scripts/*.js
+!/scripts/test-video-loading.js
+!/scripts/verify-video-entries.js
 # next.js
 /.next/
 /out/
