@@ -9,6 +9,33 @@ import { fetchVideoClient, fetchVideosClient } from '@/lib/api';
 
 export const runtime = 'edge';
 
+// Utility function to extract the correct TeraID from different formats
+const extractTeraId = (id) => {
+  // Case 1: Plain TeraID (alphanumeric string)
+  if (/^[a-zA-Z0-9]+$/.test(id) && id.length >= 5) {
+    console.log(`✅ Valid TeraID format: ${id}`);
+    return id;
+  }
+  
+  // Case 2: URL format (extract TeraID from it)
+  if (id.includes('teraboxapp.com/s/') || id.includes('terabox.com/s/')) {
+    const matches = id.match(/\/s\/([a-zA-Z0-9]+)/);
+    if (matches && matches[1]) {
+      console.log(`✅ Extracted TeraID from URL: ${matches[1]}`);
+      return matches[1];
+    }
+  }
+  
+  // Case 3: Numeric ID (database ID) - can't extract TeraID directly
+  if (/^\d+$/.test(id)) {
+    console.log(`⚠️ Numeric ID detected: ${id}, will need to fetch TeraID from database`);
+    return null;
+  }
+  
+  console.log(`⚠️ Unknown ID format: ${id}`);
+  return id; // Return as-is if we can't determine the format
+};
+
 const TeraBoxPlayer = ({ teraId, title }) => {
   // Enhanced player with better error handling and dynamic loading
   const [playerLoaded, setPlayerLoaded] = useState(false);
@@ -185,12 +212,36 @@ export default function WatchPage() {
       
       const loadVideo = async () => {
         try {
-          console.log(`🔍 Loading video details for ID: ${params.id}`);
+          // First, try to extract a valid TeraID from the URL parameter
+          const extractedTeraId = extractTeraId(params.id);
+          console.log(`🔍 Loading video details for ID: ${params.id} (Extracted TeraID: ${extractedTeraId || 'None'})`);
+          
+          // If it looks like a direct TeraID, we can try to create a temporary video object
+          let directTeraBoxVideo = null;
+          if (extractedTeraId && extractedTeraId !== params.id && /^[a-zA-Z0-9]+$/.test(extractedTeraId)) {
+            console.log(`🎬 Creating temporary TeraBox video player with direct TeraID: ${extractedTeraId}`);
+            directTeraBoxVideo = {
+              id: extractedTeraId,
+              title: `TeraBox Video (${extractedTeraId})`,
+              tera_id: extractedTeraId,
+              poster: `https://teraboxapp.com/thumbnail/s/${extractedTeraId}.jpg`,
+              description: 'Loading video details...',
+              views: 0,
+              likes: 0,
+              dislikes: 0,
+              created_at: new Date().toISOString()
+            };
+          }
+          
+          // Try to fetch from API
           const { video: fetchedVideo, relatedVideos: related } = await fetchVideoClient(params.id);
           
-          if (fetchedVideo) {
-            console.log(`✅ Video loaded successfully: ${fetchedVideo.title}`);
-            setVideo(fetchedVideo);
+          // Use either the fetched video or our temporary one
+          const videoToUse = fetchedVideo || directTeraBoxVideo;
+          
+          if (videoToUse) {
+            console.log(`✅ Video ready: ${videoToUse.title}`);
+            setVideo(videoToUse);
             
             // If no related videos or less than minimum, fetch random videos
             if (!related || related.length < 20) {
@@ -204,7 +255,7 @@ export default function WatchPage() {
                 });
                 
                 // Filter out the current video from random videos
-                const filteredVideos = randomVideos.filter(v => v.id !== fetchedVideo.id);
+                const filteredVideos = randomVideos.filter(v => v.id !== videoToUse.id);
                 console.log(`✅ Fetched ${filteredVideos.length} random videos as alternatives`);
                 setRelatedVideos(filteredVideos);
               } catch (randomError) {
@@ -218,8 +269,10 @@ export default function WatchPage() {
             }
 
             // Increment view count - don't block the UI if this fails
-            fetch(`/api/videos/${params.id}/views`, { method: 'POST' })
-              .catch(viewError => console.error('❌ Error updating view count:', viewError));
+            if (fetchedVideo && fetchedVideo.id) {
+              fetch(`/api/videos/${fetchedVideo.id}/views`, { method: 'POST' })
+                .catch(viewError => console.error('❌ Error updating view count:', viewError));
+            }
             
           } else {
             console.warn(`⚠️ No video found with ID: ${params.id}`);
@@ -446,9 +499,14 @@ export default function WatchPage() {
                 teraId={video.tera_id}
                 title={video.title || 'Untitled Video'}
               />
+            ) : extractTeraId(params.id) ? (
+              <TeraBoxPlayer 
+                teraId={extractTeraId(params.id)}
+                title={video.title || `Video ${params.id}`}
+              />
             ) : (
               <VideoPlayer 
-                videoUrl={`https://teraboxapp.com/s/${video.tera_id}`} 
+                videoUrl={video.video_url || ''}
                 poster={video.poster || '/placeholder-video.jpg'} 
               />
             )}
