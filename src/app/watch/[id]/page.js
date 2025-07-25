@@ -2,10 +2,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Heart, Share2, Download, ThumbsUp, ThumbsDown, Clock, Eye, Star, Flag, Bookmark } from 'lucide-react';
+import Head from 'next/head';
 import Header from '@/components/Header';
 import VideoCard from '@/components/VideoCard';
 import Footer from '@/components/Footer';
 import { fetchVideoClient, fetchVideosClient } from '@/lib/api';
+
+// CSP component to allow TeraBox iframes 
+const TeraBoxCSP = () => {
+  return (
+    <Head>
+      <meta httpEquiv="Content-Security-Policy" 
+            content="frame-src 'self' *.terabox.tech *.teraboxapp.com *.4funbox.com *.dibshare.com;" />
+    </Head>
+  );
+};
 
 export const runtime = 'edge';
 
@@ -37,20 +48,36 @@ const extractTeraId = (id) => {
 };
 
 const TeraBoxPlayer = ({ teraId, title }) => {
-  // Enhanced player with better error handling and dynamic loading
+  // Enhanced player with better error handling and multi-source fallback
   const [playerLoaded, setPlayerLoaded] = useState(false);
   const [playerError, setPlayerError] = useState(false);
   const [playerSource, setPlayerSource] = useState('terabox');
+  const [tryCount, setTryCount] = useState(0);
   
   // Generate multiple player URLs to try if one fails
-  const teraboxEmbedUrl = `https://player.terabox.tech/?url=https%3A%2F%2Fteraboxapp.com%2Fs%2F${teraId}`;
-  const directTeraboxUrl = `https://teraboxapp.com/s/${teraId}`;
-  const alternativeEmbedUrl = `https://www.4funbox.com/s/${teraId}`;
+  // URL encode the teraId to ensure it works properly
+  const encodedTeraId = encodeURIComponent(teraId);
+  
+  // Improved player URL structure with multiple fallbacks
+  const playerSources = {
+    // Primary embed player with full URL encoding
+    terabox: `https://player.terabox.tech/?url=https%3A%2F%2Fteraboxapp.com%2Fs%2F${encodedTeraId}`,
+    
+    // Alternate direct embedding approach
+    alternative: `https://www.4funbox.com/embed/s/${encodedTeraId}`,
+    
+    // New proxy-based player (using a different domain)
+    proxy: `https://www.dibshare.com/api/player?url=teraboxapp.com/s/${encodedTeraId}`,
+    
+    // Direct links users can open in new tab if embedded players fail
+    direct: `https://teraboxapp.com/s/${encodedTeraId}`
+  };
   
   useEffect(() => {
     // Reset states when teraId changes
     setPlayerLoaded(false);
     setPlayerError(false);
+    setTryCount(0);
     
     // Verify if we have a valid teraId
     if (!teraId || teraId.length < 5) {
@@ -59,54 +86,54 @@ const TeraBoxPlayer = ({ teraId, title }) => {
       return;
     }
     
-    console.log(`🎬 Setting up TeraBox player for ID: ${teraId}`);
+    console.log(`🎬 Setting up TeraBox player for ID: ${teraId} (Source: ${playerSource})`);
     
     // Add a timeout to detect if iframe fails to load
     const timeoutId = setTimeout(() => {
       if (!playerLoaded) {
-        console.warn("⚠️ TeraBox player failed to load within timeout period");
+        console.warn(`⚠️ TeraBox player (${playerSource}) failed to load within timeout period`);
         
-        // Switch to alternative player source
+        // Try next player source in sequence
         if (playerSource === 'terabox') {
           console.log("🔄 Trying alternative player source");
           setPlayerSource('alternative');
-          
-          // Reset timeout to give alternative a chance
-          const altTimeoutId = setTimeout(() => {
-            if (!playerLoaded) {
-              setPlayerError(true);
-            }
-          }, 8000);
-          
-          return () => clearTimeout(altTimeoutId);
+        } else if (playerSource === 'alternative') {
+          console.log("🔄 Trying proxy player source");
+          setPlayerSource('proxy');
         } else {
           setPlayerError(true);
         }
+        
+        setTryCount(prev => prev + 1);
       }
-    }, 8000); // 8 seconds timeout
+    }, 6000); // 6 seconds timeout (reduced from 8s for faster fallback)
     
     return () => clearTimeout(timeoutId);
   }, [teraId, playerSource]);
   
   const handleLoad = () => {
-    console.log("✅ TeraBox player loaded successfully");
+    console.log(`✅ TeraBox player (${playerSource}) loaded successfully`);
     setPlayerLoaded(true);
     setPlayerError(false);
   };
   
   const handleError = () => {
-    console.error("❌ Error loading TeraBox player");
+    console.error(`❌ Error loading TeraBox player (${playerSource})`);
+    
+    // Try next player source in sequence
     if (playerSource === 'terabox') {
-      // Try alternative source
-      console.log("🔄 Switching to alternative player source after error");
       setPlayerSource('alternative');
+    } else if (playerSource === 'alternative') {
+      setPlayerSource('proxy');
     } else {
       setPlayerError(true);
     }
+    
+    setTryCount(prev => prev + 1);
   };
   
   // Get current embed URL based on source
-  const currentEmbedUrl = playerSource === 'terabox' ? teraboxEmbedUrl : alternativeEmbedUrl;
+  const currentEmbedUrl = playerSources[playerSource];
   
   return (
     <div className="relative aspect-video bg-black rounded-lg overflow-hidden shadow-xl">
@@ -116,44 +143,50 @@ const TeraBoxPlayer = ({ teraId, title }) => {
           <p className="text-xl mb-4">Player failed to load</p>
           <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-4">
             <a 
-              href={directTeraboxUrl}
+              href={playerSources.direct}
               target="_blank"
               rel="noopener noreferrer"
               className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors duration-300 text-center"
             >
               Open on TeraBox
             </a>
-            <a 
-              href={alternativeEmbedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => {
+                setPlayerError(false);
+                setPlayerLoaded(false);
+                setPlayerSource('terabox');
+                setTryCount(0);
+              }}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-300 text-center"
             >
-              Try Alternative Link
-            </a>
+              Try Again
+            </button>
           </div>
         </div>
       ) : (
         <>
+          {/* Add key prop to force iframe recreation when source changes */}
           <iframe 
+            key={`${playerSource}-${tryCount}`}
             src={currentEmbedUrl}
             width="100%"
             height="100%"
             frameBorder="0"
             allowFullScreen
             scrolling="no"
-            title={title}
+            title={title || `TeraBox Video ${teraId}`}
             className="w-full h-full rounded-lg"
             onLoad={handleLoad}
             onError={handleError}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+            referrerPolicy="no-referrer-when-downgrade"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-popups-to-escape-sandbox"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           />
           {!playerLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
               <div className="text-center">
                 <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mb-2"></div>
-                <p className="text-white">Loading video player...</p>
+                <p className="text-white">Loading video player... {tryCount > 0 ? `(Try ${tryCount + 1})` : ''}</p>
               </div>
             </div>
           )}
@@ -262,6 +295,19 @@ export default function WatchPage() {
   const [isDisliked, setIsDisliked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  
+  // Allow TeraBox iframes via CSP headers
+  useEffect(() => {
+    // Add CSP meta tag programmatically - this is a fallback if the Head component doesn't work
+    let cspMeta = document.createElement('meta');
+    cspMeta.httpEquiv = "Content-Security-Policy";
+    cspMeta.content = "frame-src 'self' *.terabox.tech *.teraboxapp.com *.4funbox.com *.dibshare.com;";
+    document.head.appendChild(cspMeta);
+    
+    return () => {
+      document.head.removeChild(cspMeta);
+    };
+  }, []);
 
   useEffect(() => {
     if (params?.id) {
@@ -554,6 +600,7 @@ export default function WatchPage() {
   // Update the button onClick handlers
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      <TeraBoxCSP />
       <Header />
       
       <main className="max-w-7xl mx-auto px-4 py-6">
